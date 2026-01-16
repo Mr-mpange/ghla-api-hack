@@ -7,6 +7,22 @@ yarn.lock
 .env
 .env.local
 .env.production
+.env.development
+.env.test
+.env.*.local
+*.env
+
+# Credentials and secrets
+credentials.json
+secrets.json
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+config/secrets.js
+config/credentials.js
 
 # Database
 data/
