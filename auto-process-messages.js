@@ -24,6 +24,7 @@ class AutoResponseService {
     this.processedMessages = new Set();
     this.responseQueue = [];
     this.isProcessing = false;
+    this.rateLimiter = new Map(); // Track message frequency per user
   }
 
   /**
@@ -33,13 +34,33 @@ class AutoResponseService {
     try {
       const { from, message, name, messageId } = messageData;
       
-      // Prevent duplicate processing
+      // Create a unique key for this message
+      const messageKey = `${from}_${message}_${Date.now()}`;
+      
+      // Prevent duplicate processing with more robust checking
       if (this.processedMessages.has(messageId)) {
         console.log(`⏭️ Message ${messageId} already processed, skipping`);
-        return { success: true, message: 'Already processed' };
+        return { success: true, message: 'Already processed', duplicate: true };
       }
 
+      // Also check for recent similar messages from same user
+      const recentMessageKey = `${from}_${message}`;
+      const now = Date.now();
+      
+      // Check if we processed a similar message from this user in the last 5 seconds
+      for (const processedKey of this.processedMessages) {
+        if (typeof processedKey === 'string' && processedKey.startsWith(recentMessageKey)) {
+          const timestamp = processedKey.split('_').pop();
+          if (now - parseInt(timestamp) < 5000) { // 5 seconds
+            console.log(`⏭️ Similar message from ${name} processed recently, skipping`);
+            return { success: true, message: 'Recent duplicate', duplicate: true };
+          }
+        }
+      }
+
+      // Add both messageId and messageKey to prevent duplicates
       this.processedMessages.add(messageId);
+      this.processedMessages.add(messageKey);
       
       console.log(`🤖 AUTO-PROCESSING: ${name} (+${from}) - "${message}"`);
       
@@ -53,14 +74,15 @@ class AutoResponseService {
       if (botResponse.success) {
         console.log(`✅ Bot generated response for ${name}`);
         
-        // Auto-send response (simulate sending)
+        // Auto-send response
         const responseResult = await this.autoSendResponse(from, botResponse, name);
         
         return {
           success: true,
           message: 'Message auto-processed and response sent',
           botResponse: botResponse,
-          responseResult: responseResult
+          responseResult: responseResult,
+          duplicate: false
         };
       } else {
         console.log(`❌ Bot processing failed for ${name}:`, botResponse.error);
@@ -235,6 +257,32 @@ class AutoResponseService {
   }
 
   /**
+   * Clean up old processed messages to prevent memory issues
+   */
+  cleanupOldMessages() {
+    const now = Date.now();
+    const oldMessages = [];
+    
+    for (const messageKey of this.processedMessages) {
+      if (typeof messageKey === 'string' && messageKey.includes('_')) {
+        const parts = messageKey.split('_');
+        const timestamp = parseInt(parts[parts.length - 1]);
+        
+        // Remove messages older than 1 hour
+        if (now - timestamp > 3600000) {
+          oldMessages.push(messageKey);
+        }
+      }
+    }
+    
+    oldMessages.forEach(key => this.processedMessages.delete(key));
+    
+    if (oldMessages.length > 0) {
+      console.log(`🧹 Cleaned up ${oldMessages.length} old processed messages`);
+    }
+  }
+
+  /**
    * Extract message data from WhatsApp webhook
    */
   extractMessageData(webhookPayload) {
@@ -331,15 +379,16 @@ app.get('/health', (req, res) => {
 app.post('/webhook/auto', async (req, res) => {
   try {
     console.log('🔔 AUTO-WEBHOOK: Incoming message');
+    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
     
     // Extract message data
     const messageData = autoResponseService.extractMessageData(req.body);
     
     if (!messageData) {
-      console.log('❌ No valid message data found');
+      console.log('❌ No valid message data found in webhook payload');
       return res.status(400).json({
         success: false,
-        error: 'Invalid webhook payload'
+        error: 'Invalid webhook payload - no message data found'
       });
     }
 
