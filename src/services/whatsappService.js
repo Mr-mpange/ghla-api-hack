@@ -1,170 +1,439 @@
-const ghalaService = require('./ghalaService');
-const { products, promotions } = require('../config/products');
+const axios = require('axios');
 const logger = require('../utils/logger');
 
-/**
- * Send greeting message with main menu
- */
-const sendGreeting = async (phoneNumber, customerName = null) => {
-  const greeting = customerName 
-    ? `Hello ${customerName}! 👋` 
-    : 'Hello! 👋';
-
-  const message = `${greeting}\n\nWelcome to our Micro-Sales Assistant!\n\nHow can I help you today?`;
-
-  const buttons = [
-    { id: 'view_products', title: '🛍️ View Products' },
-    { id: 'view_promotions', title: '🎉 View Promotions' }
-  ];
-
-  return await ghalaService.sendInteractiveButtons(phoneNumber, message, buttons);
-};
-
-/**
- * Send product catalog as interactive list
- */
-const sendProductCatalog = async (phoneNumber) => {
-  const sections = [{
-    title: 'Available Products',
-    rows: products.map(product => ({
-      id: product.id,
-      title: `${product.emoji} ${product.name}`,
-      description: `${product.currency} ${product.price} - ${product.description}`
-    }))
-  }];
-
-  return await ghalaService.sendInteractiveList(
-    phoneNumber,
-    '🛍️ *Our Product Catalog*\n\nSelect a product to order:',
-    'View Products',
-    sections
-  );
-};
-
-/**
- * Send promotions list
- */
-const sendPromotions = async (phoneNumber) => {
-  let message = '🎉 *Current Promotions*\n\n';
-  
-  promotions.forEach((promo, index) => {
-    message += `${promo.emoji} *${promo.title}*\n`;
-    message += `${promo.description}\n`;
-    message += `Valid until: ${promo.validUntil}\n\n`;
-  });
-
-  message += 'Reply with "products" to browse our catalog!';
-
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
-
-/**
- * Send product details and quantity request
- */
-const sendProductDetails = async (phoneNumber, productId) => {
-  const product = products.find(p => p.id === productId);
-  
-  if (!product) {
-    return await ghalaService.sendWhatsAppMessage(
-      phoneNumber,
-      'Sorry, product not found. Please try again.'
-    );
+class WhatsAppService {
+  constructor() {
+    this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    this.apiUrl = `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`;
   }
 
-  const message = `${product.emoji} *${product.name}*\n\n` +
-    `${product.description}\n\n` +
-    `*Price:* ${product.currency} ${product.price}\n\n` +
-    `Please reply with the quantity you want to order (e.g., "2")`;
+  // Send a simple text message
+  async sendMessage(to, text) {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'text',
+        text: {
+          body: text
+        }
+      };
 
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-/**
- * Send payment options
- */
-const sendPaymentOptions = async (phoneNumber, orderId, totalAmount) => {
-  const message = `💰 *Order Total: KES ${totalAmount}*\n\n` +
-    `Please select your payment method:`;
+      logger.info(`WhatsApp message sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp message:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
 
-  const buttons = [
-    { id: `pay_mpesa_${orderId}`, title: '📱 M-Pesa' },
-    { id: `pay_airtel_${orderId}`, title: '📱 Airtel Money' },
-    { id: `pay_card_${orderId}`, title: '💳 Card' }
-  ];
+  // Send interactive buttons
+  async sendInteractiveButtons(to, text, buttons, header = null, footer = null) {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: {
+            text: text
+          },
+          action: {
+            buttons: buttons.map((button, index) => ({
+              type: 'reply',
+              reply: {
+                id: button.id || `btn_${index}`,
+                title: button.title.substring(0, 20) // WhatsApp limit
+              }
+            }))
+          }
+        }
+      };
 
-  return await ghalaService.sendInteractiveButtons(phoneNumber, message, buttons);
-};
+      if (header) {
+        payload.interactive.header = {
+          type: 'text',
+          text: header
+        };
+      }
 
-/**
- * Send order confirmation
- */
-const sendOrderConfirmation = async (phoneNumber, order) => {
-  const message = `✅ *Order Confirmed!*\n\n` +
-    `Order ID: ${order.id}\n` +
-    `Product: ${order.product_name}\n` +
-    `Quantity: ${order.quantity}\n` +
-    `Total: ${order.currency} ${order.total_amount}\n\n` +
-    `We're processing your payment...`;
+      if (footer) {
+        payload.interactive.footer = {
+          text: footer
+        };
+      }
 
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-/**
- * Send payment success receipt
- */
-const sendPaymentReceipt = async (phoneNumber, order, transactionRef) => {
-  const message = `🎉 *Payment Successful!*\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `*RECEIPT*\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `Order ID: ${order.id}\n` +
-    `Product: ${order.product_name}\n` +
-    `Quantity: ${order.quantity}\n` +
-    `Unit Price: ${order.currency} ${order.unit_price}\n` +
-    `Total Paid: ${order.currency} ${order.total_amount}\n` +
-    `Payment Method: ${order.payment_method}\n` +
-    `Transaction Ref: ${transactionRef}\n` +
-    `Date: ${new Date().toLocaleString()}\n\n` +
-    `${order.delivery_address ? `Delivery Address:\n${order.delivery_address}\n\n` : ''}` +
-    `Thank you for your purchase! 🙏\n\n` +
-    `Your order will be delivered soon.`;
+      logger.info(`WhatsApp interactive buttons sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp interactive buttons:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
 
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
+  // Send interactive list
+  async sendInteractiveList(to, text, buttonText, sections, header = null, footer = null) {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: {
+            text: text
+          },
+          action: {
+            button: buttonText,
+            sections: sections.map(section => ({
+              title: section.title,
+              rows: section.rows.map(row => ({
+                id: row.id,
+                title: row.title.substring(0, 24), // WhatsApp limit
+                description: row.description ? row.description.substring(0, 72) : undefined // WhatsApp limit
+              }))
+            }))
+          }
+        }
+      };
 
-/**
- * Send payment failure message
- */
-const sendPaymentFailure = async (phoneNumber, orderId, reason = null) => {
-  const message = `❌ *Payment Failed*\n\n` +
-    `Order ID: ${orderId}\n` +
-    `${reason ? `Reason: ${reason}\n\n` : ''}` +
-    `Please try again or contact support if the issue persists.\n\n` +
-    `Reply "retry" to try payment again.`;
+      if (header) {
+        payload.interactive.header = {
+          type: 'text',
+          text: header
+        };
+      }
 
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
+      if (footer) {
+        payload.interactive.footer = {
+          text: footer
+        };
+      }
 
-/**
- * Send follow-up for pending orders
- */
-const sendPendingOrderReminder = async (phoneNumber, orderId) => {
-  const message = `⏰ *Order Reminder*\n\n` +
-    `You have a pending order (${orderId}).\n\n` +
-    `Would you like to complete the payment?\n\n` +
-    `Reply "yes" to continue or "cancel" to cancel the order.`;
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-  return await ghalaService.sendWhatsAppMessage(phoneNumber, message);
-};
+      logger.info(`WhatsApp interactive list sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp interactive list:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
 
-module.exports = {
-  sendGreeting,
-  sendProductCatalog,
-  sendPromotions,
-  sendProductDetails,
-  sendPaymentOptions,
-  sendOrderConfirmation,
-  sendPaymentReceipt,
-  sendPaymentFailure,
-  sendPendingOrderReminder
-};
+  // Send image message
+  async sendImage(to, imageUrl, caption = '') {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'image',
+        image: {
+          link: imageUrl,
+          caption: caption
+        }
+      };
+
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      logger.info(`WhatsApp image sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp image:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send document
+  async sendDocument(to, documentUrl, filename, caption = '') {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'document',
+        document: {
+          link: documentUrl,
+          filename: filename,
+          caption: caption
+        }
+      };
+
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      logger.info(`WhatsApp document sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp document:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send location
+  async sendLocation(to, latitude, longitude, name = '', address = '') {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'location',
+        location: {
+          latitude: latitude,
+          longitude: longitude,
+          name: name,
+          address: address
+        }
+      };
+
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      logger.info(`WhatsApp location sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp location:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send template message
+  async sendTemplate(to, templateName, languageCode = 'en', components = []) {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: to.replace('+', ''),
+        type: 'template',
+        template: {
+          name: templateName,
+          language: {
+            code: languageCode
+          },
+          components: components
+        }
+      };
+
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      logger.info(`WhatsApp template sent to ${to}:`, response.data);
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp template:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Mark message as read
+  async markAsRead(messageId) {
+    try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId
+      };
+
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      logger.info(`WhatsApp message marked as read:`, response.data);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error marking WhatsApp message as read:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Get media URL
+  async getMediaUrl(mediaId) {
+    try {
+      const response = await axios.get(`https://graph.facebook.com/v18.0/${mediaId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        }
+      });
+
+      logger.info(`WhatsApp media URL retrieved:`, response.data);
+      return {
+        success: true,
+        url: response.data.url,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error getting WhatsApp media URL:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Download media
+  async downloadMedia(mediaUrl) {
+    try {
+      const response = await axios.get(mediaUrl, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        },
+        responseType: 'stream'
+      });
+
+      logger.info(`WhatsApp media downloaded successfully`);
+      return {
+        success: true,
+        stream: response.data,
+        contentType: response.headers['content-type']
+      };
+    } catch (error) {
+      logger.error('Error downloading WhatsApp media:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Validate webhook signature
+  validateWebhookSignature(payload, signature, verifyToken) {
+    try {
+      const crypto = require('crypto');
+      const expectedSignature = crypto
+        .createHmac('sha256', verifyToken)
+        .update(payload)
+        .digest('hex');
+
+      return signature === `sha256=${expectedSignature}`;
+    } catch (error) {
+      logger.error('Error validating webhook signature:', error);
+      return false;
+    }
+  }
+
+  // Format phone number
+  formatPhoneNumber(phoneNumber) {
+    // Remove any non-digit characters except +
+    let formatted = phoneNumber.replace(/[^\d+]/g, '');
+    
+    // If it starts with +, remove it for WhatsApp API
+    if (formatted.startsWith('+')) {
+      formatted = formatted.substring(1);
+    }
+    
+    // If it starts with 0 (local format), replace with country code
+    if (formatted.startsWith('0')) {
+      formatted = '254' + formatted.substring(1); // Kenya country code
+    }
+    
+    return formatted;
+  }
+
+  // Check if service is configured
+  isConfigured() {
+    return !!(this.accessToken && this.phoneNumberId);
+  }
+
+  // Get service status
+  getStatus() {
+    return {
+      configured: this.isConfigured(),
+      phoneNumberId: this.phoneNumberId ? `***${this.phoneNumberId.slice(-4)}` : null,
+      hasAccessToken: !!this.accessToken
+    };
+  }
+}
+
+module.exports = new WhatsAppService();
