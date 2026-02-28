@@ -175,6 +175,53 @@ class WhatsAppResponseService {
   }
 
   /**
+   * Send image message via WhatsApp Business API
+   */
+  async sendImageMessage(to, imageUrl, caption = '') {
+    try {
+      if (!this.enabled) {
+        logger.warn('WhatsApp Response Service not enabled');
+        return { success: false, error: 'Service not configured' };
+      }
+
+      const payload = {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "image",
+        image: {
+          link: imageUrl,
+          caption: caption
+        }
+      };
+
+      const response = await axios.post(
+        `${this.baseUrl}/${this.phoneNumberId}/messages`,
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      logger.info(`WhatsApp image sent to ${to}:`, response.data);
+      
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error sending WhatsApp image:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
    * Process incoming WhatsApp message with advanced car rental bot
    */
   async processIncomingMessage(messageData) {
