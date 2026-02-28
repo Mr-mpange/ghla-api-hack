@@ -148,7 +148,27 @@ class BriqNotificationService {
    * Send all notifications (SMS, Voice, WhatsApp) for payment confirmation
    */
   async sendPaymentConfirmationNotifications(booking) {
+    // Log booking data for debugging
+    logger.info(`[Briq] Booking data received: ${JSON.stringify({
+      id: booking.id,
+      customerName: booking.customerName,
+      customerPhone: booking.customerPhone,
+      carName: booking.carName,
+      totalAmount: booking.totalAmount
+    })}`);
+
     const { customerName, customerPhone, carName, pickupDate, returnDate, totalAmount } = booking;
+
+    // Validate required fields
+    if (!customerPhone) {
+      logger.error(`[Briq] Missing customerPhone in booking ${booking.id}`);
+      throw new Error('Customer phone number is required for notifications');
+    }
+
+    if (!customerName || !carName || !totalAmount) {
+      logger.error(`[Briq] Missing required booking data: name=${customerName}, car=${carName}, amount=${totalAmount}`);
+      throw new Error('Missing required booking information');
+    }
 
     // Format phone number (ensure it starts with +255)
     const formattedPhone = customerPhone.startsWith('+') ? customerPhone : `+${customerPhone}`;

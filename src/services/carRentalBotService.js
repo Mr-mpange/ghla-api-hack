@@ -453,11 +453,13 @@ Just send the number or tell me how many days you need.`;
       id: bookingId,
       customerId: phoneNumber,
       customerName: customerName,
+      customerPhone: `+${phoneNumber}`, // Add customerPhone for notifications
       carId: carId,
       carName: car.name,
       pickupDate: details.pickupDate,
       returnDate: details.returnDate,
       pickupLocation: details.pickupLocation,
+      days: details.totalDays, // Add days field
       totalDays: details.totalDays,
       dailyRate: car.price,
       totalAmount: car.price * details.totalDays,
