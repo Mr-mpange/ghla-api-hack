@@ -6,7 +6,7 @@ async function testVoiceCall() {
   console.log('=' .repeat(60));
   
   const phoneNumber = '+255683859574';
-  const testMessage = 'Hello! This is a test voice call from CarRental Pro. Your booking for Toyota Vitz has been confirmed successfully. Pickup date is March 15, 2024. Total amount is 1000 Tanzanian Shillings. Thank you for choosing CarRental Pro.';
+  const testMessage = 'Hello! This is a your voice call from CarRental Pro. Your booking for Toyota Vitz has been confirmed successfully. Pickup date is March 15, 2024. Total amount is 500 Tanzanian Shillings. Thank you for choosing CarRental Pro.';
   
   console.log('Configuration:');
   console.log('  Phone Number:', phoneNumber);

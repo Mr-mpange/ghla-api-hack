@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Admin UI Flow</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .step { margin: 20px 0; padding: 15px; border: 2px solid #ddd; border-radius: 8px; }
+        .success { background: #d4edda; border-color: #28a745; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Admin UI Flow Test</h1>
+    
+    <div class="step">
+        <h3>Step 1: Open Admin Page</h3>
+        <p>Click the button below to open the admin dashboard:</p>
+        <button onclick="window.open('http://localhost:3000/admin.html', '_blank')">
+            Open Admin Dashboard
+        </button>
+    </div>
+    
+    <div class="step">
+        <h3>Step 2: What You Should See</h3>
+        <ol>
+            <li>Login screen with phone number field</li>
+            <li>Phone number pre-filled: <code>+255683859574</code></li>
+            <li>"Send OTP" button</li>
+        </ol>
+    </div>
+    
+    <div class="step">
+        <h3>Step 3: Click "Send OTP"</h3>
+        <p>After clicking:</p>
+        <ul>
+            <li>✅ Button changes to "Sending OTP..."</li>
+            <li>✅ Success message appears: "OTP sent to your phone!"</li>
+            <li>✅ Phone form HIDES</li>
+            <li>✅ OTP form SHOWS with input field</li>
+        </ul>
+    </div>
+    
+    <div class="step">
+        <h3>Step 4: Check Your Phone</h3>
+        <p>You should receive SMS:</p>
+        <pre>Your CarRental Pro Admin OTP is: 123456
+
+Valid for 5 minutes.
+
+Do not share this code.</pre>
+    </div>
+    
+    <div class="step">
+        <h3>Step 5: Enter OTP</h3>
+        <p>On the admin page:</p>
+        <ul>
+            <li>Type the 6-digit code from SMS</li>
+            <li>Click "Verify & Login"</li>
+            <li>Button changes to "Verifying..."</li>
+        </ul>
+    </div>
+    
+    <div class="step success">
+        <h3>Step 6: Dashboard Opens! 🎉</h3>
+        <p>You should see:</p>
+        <ul>
+            <li>📊 Stats tab with booking numbers</li>
+            <li>📋 Bookings tab with customer data</li>
+            <li>🚗 Fleet tab with car availability</li>
+            <li>👥 Sessions tab with active chats</li>
+        </ul>
+    </div>
+    
+    <hr>
+    
+    <div class="step">
+        <h3>🐛 If OTP Form Doesn't Show:</h3>
+        <ol>
+            <li>Refresh the admin page</li>
+            <li>Check browser console for errors (F12)</li>
+            <li>Make sure server is running</li>
+            <li>Try again</li>
+        </ol>
+    </div>
+    
+    <div class="step">
+        <h3>🔧 Quick Debug:</h3>
+        <button onclick="testAPI()">Test API Connection</button>
+        <pre id="result"></pre>
+    </div>
+    
+    <script>
+        async function testAPI() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:3000/admin/auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: '+255683859574' })
+                });
+                
+                const data = await response.json();
+                result.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    result.style.color = 'green';
+                    alert('✅ API Working! Check your phone for OTP.');
+                } else {
+                    result.style.color = 'red';
+                }
+            } catch (error) {
+                result.textContent = 'Error: ' + error.message;
+                result.style.color = 'red';
+            }
+        }
+    </script>
+</body>
+</html>
