@@ -1,19 +1,12 @@
 const axios = require('axios');
-const https = require('https');
 const logger = require('../utils/logger');
 
 class BriqNotificationService {
   constructor() {
     this.apiKey = process.env.BRIQ_API_KEY;
-    // Hardcoded base URLs for different Briq services
-    this.smsApiUrl = 'https://karibu.briq.tz';  // SMS uses production HTTPS
-    this.voiceApiUrl = 'http://pre-release.karibu.briq.tz';  // Voice uses pre-release HTTP (SSL issues)
+    // Using production base URL for both SMS and Voice
+    this.apiUrl = 'https://karibu.briq.tz';
     this.senderId = process.env.BRIQ_SENDER_ID || 'BRIQ';
-    
-    // Create HTTPS agent that ignores SSL errors for pre-release
-    this.httpsAgent = new https.Agent({
-      rejectUnauthorized: false
-    });
     
     // Validate configuration
     if (!this.apiKey) {
@@ -29,7 +22,7 @@ class BriqNotificationService {
       logger.info(`[Briq] Sending SMS to ${phoneNumber}`);
       
       const response = await axios.post(
-        `${this.smsApiUrl}/v1/message/send-instant`,
+        `${this.apiUrl}/v1/message/send-instant`,
         {
           content: message,
           recipients: [phoneNumber],
@@ -65,7 +58,7 @@ class BriqNotificationService {
 
   /**
    * Send Voice call notification via Briq Voice API (TTS)
-   * Uses HTTP (non-secure) because pre-release has SSL issues
+   * Uses production HTTPS endpoint
    */
   async sendVoiceCall(phoneNumber, message) {
     try {
@@ -74,9 +67,9 @@ class BriqNotificationService {
       // Format phone number (remove + for Briq Voice API - E.164 or national format)
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
       
-      // Use HTTP (non-secure) for voice API due to SSL issues on pre-release
+      // Use production HTTPS endpoint
       const response = await axios.post(
-        `${this.voiceApiUrl}/v1/voice/calls/tts`,
+        `${this.apiUrl}/v1/voice/calls/tts`,
         {
           receiver_number: formattedPhone,
           text: message
@@ -120,7 +113,7 @@ class BriqNotificationService {
       
       // Try with channel parameter (Briq accepts it but may send as SMS)
       const response = await axios.post(
-        `${this.smsApiUrl}/v1/message/send-instant`,
+        `${this.apiUrl}/v1/message/send-instant`,
         {
           content: message,
           recipients: [phoneNumber],
