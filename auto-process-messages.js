@@ -154,6 +154,21 @@ class AutoResponseService {
 
       // Actually send via WhatsApp Business API
       const axios = require('axios');
+      
+      // Fix interactive list format for WhatsApp API compatibility
+      if (payload.type === 'interactive' && payload.interactive && payload.interactive.type === 'list') {
+        // WhatsApp API has strict requirements for interactive lists
+        payload.interactive = {
+          type: "list",
+          body: { text: botResponse.response },
+          footer: { text: "CarRental Pro" },
+          action: {
+            button: "Select Option",
+            sections: botResponse.listItems
+          }
+        };
+      }
+      
       const response = await axios.post(
         `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
         payload,
@@ -291,6 +306,14 @@ class AutoResponseService {
         const entry = webhookPayload.entry[0];
         if (entry.changes && entry.changes.length > 0) {
           const change = entry.changes[0];
+          
+          // Check if this is a status update (read receipt, delivery confirmation)
+          if (change.value && change.value.statuses) {
+            console.log('📊 STATUS UPDATE: Message delivery/read confirmation received');
+            return null; // Don't process status updates
+          }
+          
+          // Process actual messages
           if (change.value && change.value.messages && change.value.messages.length > 0) {
             const message = change.value.messages[0];
             const contact = change.value.contacts ? change.value.contacts[0] : null;
@@ -379,12 +402,20 @@ app.get('/health', (req, res) => {
 app.post('/webhook/auto', async (req, res) => {
   try {
     console.log('🔔 AUTO-WEBHOOK: Incoming message');
-    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
     
     // Extract message data
     const messageData = autoResponseService.extractMessageData(req.body);
     
     if (!messageData) {
+      // Check if this is a status update
+      if (req.body.entry && req.body.entry[0].changes && req.body.entry[0].changes[0].value.statuses) {
+        console.log('📊 STATUS UPDATE: Ignoring delivery/read confirmation');
+        return res.status(200).json({
+          success: true,
+          message: 'Status update received and ignored'
+        });
+      }
+      
       console.log('❌ No valid message data found in webhook payload');
       return res.status(400).json({
         success: false,
