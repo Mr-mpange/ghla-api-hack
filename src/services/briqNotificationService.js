@@ -67,6 +67,10 @@ class BriqNotificationService {
       // Format phone number (remove + for Briq Voice API - E.164 or national format)
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
       
+      logger.info(`[Briq] Voice call - Original: ${phoneNumber}, Formatted: ${formattedPhone}`);
+      logger.info(`[Briq] Voice call - Message length: ${message.length} chars`);
+      logger.info(`[Briq] Voice call - Message preview: ${message.substring(0, 100)}...`);
+      
       // Use production HTTPS endpoint
       const response = await axios.post(
         `${this.apiUrl}/v1/voice/calls/tts`,
@@ -172,6 +176,8 @@ class BriqNotificationService {
 
     // Format phone number (ensure it starts with +255)
     const formattedPhone = customerPhone.startsWith('+') ? customerPhone : `+${customerPhone}`;
+    
+    logger.info(`[Briq] Formatted phone for notifications: ${formattedPhone}`);
 
     // Create congratulations messages
     const smsMessage = `Congratulations ${customerName}! Your ${carName} booking is confirmed. Pickup: ${pickupDate}. Total: TZS ${totalAmount.toLocaleString()}. Your car will arrive soon. Thank you for choosing CarRental Pro!`;
